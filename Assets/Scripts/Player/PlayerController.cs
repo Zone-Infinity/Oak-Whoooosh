@@ -4,14 +4,20 @@ using Unity.VisualScripting;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
-[RequireComponent(typeof(Rigidbody2D))]
+[RequireComponent(typeof(Rigidbody2D), typeof(TouchingDirections))]
 public class PlayerController : MonoBehaviour
 {
     public float walkSpeed = 5f;
     public float runSpeed = 8f;
+    public float airSpeed = 3f;
+    public float jumpImpulse = 10f;
 
     Vector2 moveInput;
+    TouchingDirections touchingDirections;
 
+    private bool spacePressed = false;
+
+    [SerializeField]
     private bool _isMoving = false;
     public bool IsMoving { 
         get {
@@ -19,11 +25,11 @@ public class PlayerController : MonoBehaviour
         } 
         private set{
             _isMoving = value;
-            animator.SetBool(AnimationString.moving, value);
-            
+            animator.SetBool(AnimationStrings.moving, value);  
         } 
     }
 
+    [SerializeField]
     private bool _isRunning = false;
     public bool IsRunning {
         get {
@@ -31,7 +37,7 @@ public class PlayerController : MonoBehaviour
         }
         private set {
             _isRunning = value;
-            animator.SetBool(AnimationString.running, value);
+            animator.SetBool(AnimationStrings.running, value);
         }
     }
 
@@ -53,34 +59,30 @@ public class PlayerController : MonoBehaviour
     {
         rb = GetComponent<Rigidbody2D>();
         animator = GetComponent<Animator>();
-    }
-
-    // Start is called before the first frame update
-    void Start()
-    {
-        
-    }
-
-    // Update is called once per frame
-    void Update()
-    {
-        
+        touchingDirections = GetComponent<TouchingDirections>();
     }
 
     void FixedUpdate()
     {
-        rb.velocity = new Vector2(moveInput.x * (IsRunning ? runSpeed : walkSpeed), rb.velocity.y);
+        if(!touchingDirections.IsOnWall) {
+            if(touchingDirections.IsGrounded)
+                rb.velocity = new Vector2(moveInput.x * (IsRunning ? runSpeed : walkSpeed), rb.velocity.y);
+            else
+                rb.velocity = new Vector2(moveInput.x * airSpeed, rb.velocity.y);
+            animator.SetFloat(AnimationStrings.yVelocity, rb.velocity.y);
+        }
     }
 
-    public void onMove(InputAction.CallbackContext ctx)
+    public void OnMove(InputAction.CallbackContext ctx)
     {
         moveInput = ctx.ReadValue<Vector2>();
 
         IsMoving = moveInput != Vector2.zero;
-        IsFacingRight = moveInput.x > 0;
+        if(moveInput.x != 0)
+            IsFacingRight = moveInput.x > 0;
     }
 
-    public void onRun(InputAction.CallbackContext ctx)
+    public void OnRun(InputAction.CallbackContext ctx)
     {
         if(ctx.started) {
             IsRunning = true;
@@ -89,10 +91,15 @@ public class PlayerController : MonoBehaviour
             IsRunning = false;
         }
     }
-}
 
-internal class AnimationString
-{
-    internal static readonly string moving = "isMoving";
-    internal static readonly string running = "isRunning";
+    public void OnJump(InputAction.CallbackContext ctx) {
+        // TODO: Check if alive aswell
+        if(ctx.started && touchingDirections.IsGrounded) {
+            spacePressed = true;
+            rb.velocity = new Vector2(moveInput.x, jumpImpulse);
+        } else if(ctx.canceled && spacePressed) {
+            spacePressed = false;
+        }
+        animator.SetBool(AnimationStrings.preaparingJump, spacePressed);
+    }
 }
